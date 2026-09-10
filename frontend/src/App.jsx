@@ -1,31 +1,39 @@
-import { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
-import UploadScreen from "./screens/UploadScreen";
-import SelectUnitsScreen from "./screens/SelectUnitsScreen";
-import CalendarScreen from "./screens/CalendarScreen";
-import AvailabilityScreen from "./screens/AvailabilityScreen";
-import GeneratingScreen from "./screens/GeneratingScreen";
-import MainScreen from "./screens/MainScreen";
-import LoginScreen from "./screens/LoginScreen";
-import LandingPage from "./screens/LandingPage";
-import LoginPage from "./screens/LoginPage";
-import SignupPage from "./screens/SignupPage";
-import MyPageScreen from "./screens/MyPageScreen";
-import { filterParsedToc, getLeafUnits, rangeMinutes } from "./lib/toc";
-import { s } from "./theme";
-import logo from "./assets/logo.png";
+import { useEffect, useState } from 'react';
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+  useLocation,
+} from 'react-router-dom';
+import UploadScreen from './screens/UploadScreen';
+import SelectUnitsScreen from './screens/SelectUnitsScreen';
+import CalendarScreen from './screens/CalendarScreen';
+import AvailabilityScreen from './screens/AvailabilityScreen';
+import GeneratingScreen from './screens/GeneratingScreen';
+import MainScreen from './screens/MainScreen';
+import LoginScreen from './screens/LoginScreen';
+import LandingPage from './screens/LandingPage';
+import LoginPage from './screens/LoginPage';
+import SignupPage from './screens/SignupPage';
+import MyPageScreen from './screens/MyPageScreen';
+import StudyStatsScreen from './screens/StudyStatsScreen';
+import { filterParsedToc, getLeafUnits, rangeMinutes } from './lib/toc';
+import { s } from './theme';
+import logo from './assets/logo.png';
 
-const API_BASE = "http://localhost:8000";
-const AUTH_API_BASE = "http://localhost:8081";
-const MAIN_PAGE_URL = "/main";
-const WEEKDAY_KEYS = ["일", "월", "화", "수", "목", "금", "토"];
+const API_BASE = 'http://localhost:8000';
+const AUTH_API_BASE = 'http://localhost:8081';
+const MAIN_PAGE_URL = '/main';
+const WEEKDAY_KEYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 const STEP_ROUTES = [
-  { path: "/upload", label: "목차 업로드" },
-  { path: "/select", label: "과목 선택" },
-  { path: "/calendar", label: "학습 기간" },
-  { path: "/availability", label: "가용 시간" },
-  { path: "/generating", label: "생성 중" },
+  { path: '/upload', label: '목차 업로드' },
+  { path: '/select', label: '과목 선택' },
+  { path: '/calendar', label: '학습 기간' },
+  { path: '/availability', label: '가용 시간' },
+  { path: '/generating', label: '생성 중' },
 ];
 
 // 재생성 시 SelectUnitsScreen에 "이미 100% 끝낸 단원은 기본으로 체크 해제된
@@ -38,7 +46,9 @@ function completedLeafKeys(leaves, days) {
   const done = new Set();
   leaves.forEach((leaf) => {
     const matches = items.filter(
-      (it) => it.content === leaf.title || (it.content || "").startsWith(`${leaf.title} (`)
+      (it) =>
+        it.content === leaf.title ||
+        (it.content || '').startsWith(`${leaf.title} (`),
     );
     if (matches.length > 0 && matches.every((it) => it.progressRate === 100)) {
       done.add(leaf.key);
@@ -68,10 +78,11 @@ function RootRedirect({ userId }) {
     let cancelled = false;
     fetch(`${API_BASE}/plans/${userId}`)
       .then((res) => {
-        if (!cancelled) navigate(res.ok ? MAIN_PAGE_URL : "/upload", { replace: true });
+        if (!cancelled)
+          navigate(res.ok ? MAIN_PAGE_URL : '/upload', { replace: true });
       })
       .catch(() => {
-        if (!cancelled) navigate("/upload", { replace: true });
+        if (!cancelled) navigate('/upload', { replace: true });
       });
     return () => {
       cancelled = true;
@@ -94,7 +105,7 @@ function AppRoutes() {
   const [lastExcludedKeys, setLastExcludedKeys] = useState([]);
   const [calendarInfo, setCalendarInfo] = useState(null);
   const [done, setDone] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   // 로그인 게이트 — 로그인 백엔드(Planit-Web-Auth-Plan-Quiz)와 연결되는 지점.
   // localStorage에 "userId"가 있으면(=예전에 로그인해서 저장해둔 uid가 있으면)
@@ -102,7 +113,7 @@ function AppRoutes() {
   // LoginScreen부터 보여준다. LoginScreen이 로그인에 성공하면
   // onLoggedIn(uid)를 호출하는데, 그게 바로 아래 setUserId다 - 그 순간
   // 이 컴포넌트가 다시 렌더링되면서 로그인 게이트를 통과하게 된다.
-  const [userId, setUserId] = useState(() => localStorage.getItem("userId"));
+  const [userId, setUserId] = useState(() => localStorage.getItem('userId'));
 
   // localStorage에 userId가 남아있다고 해서 실제 로그인 세션이 살아있다는
   // 보장은 없다 - 서버가 재시작됐거나 세션이 만료됐으면 로그인 서버 입장에선
@@ -113,15 +124,15 @@ function AppRoutes() {
   // 않는다 - 그냥 원래 로그인 상태를 유지한다.
   const [sessionChecked, setSessionChecked] = useState(false);
   useEffect(() => {
-    const stored = localStorage.getItem("userId");
+    const stored = localStorage.getItem('userId');
     if (!stored) {
       setSessionChecked(true);
       return;
     }
-    fetch(`${AUTH_API_BASE}/api/auth/me`, { credentials: "include" })
+    fetch(`${AUTH_API_BASE}/api/auth/me`, { credentials: 'include' })
       .then((res) => {
         if (!res.ok) {
-          localStorage.removeItem("userId");
+          localStorage.removeItem('userId');
           setUserId(null);
         }
       })
@@ -136,13 +147,13 @@ function AppRoutes() {
     // 다시 시작할 수 있게, 방금 분석된 원본 목차(과목 선택으로 거르기 전)를
     // 서버에 저장해둔다. 실패해도 지금 진행 중인 마법사는 그대로 계속되게
     // 흐름을 막지 않는다 - 재생성 기능만 나중에 못 쓰게 될 뿐이다.
-    const userId = localStorage.getItem("userId") || "guest";
+    const userId = localStorage.getItem('userId') || 'guest';
     fetch(`${API_BASE}/plans/${userId}/toc`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ parsedToc: data }),
     }).catch(() => {});
-    navigate("/select");
+    navigate('/select');
   };
 
   // "계획 다시 생성하기": 메인화면에서 누르면 사진 촬영/AI 분석 단계는 건너뛰고,
@@ -153,10 +164,10 @@ function AppRoutes() {
   // (완전히 자동으로 빼주는 건 아니고, 어디까지나 "기본값"이라 사용자가 다시
   // 체크해서 되살릴 수도 있다).
   const handleStartReplan = async () => {
-    const userId = localStorage.getItem("userId") || "guest";
+    const userId = localStorage.getItem('userId') || 'guest';
     try {
       const res = await fetch(`${API_BASE}/plans/${userId}/toc`);
-      if (!res.ok) throw new Error("no-toc");
+      if (!res.ok) throw new Error('no-toc');
       const data = await res.json();
 
       // 기본값 = (이번에 진행률로 새로 감지된 완료 단원) + (예전 회차에서
@@ -168,7 +179,9 @@ function AppRoutes() {
         const planRes = await fetch(`${API_BASE}/plans/${userId}`);
         if (planRes.ok) {
           const plan = await planRes.json();
-          completedLeafKeys(getLeafUnits(data.parsedToc), plan.days).forEach((k) => excluded.add(k));
+          completedLeafKeys(getLeafUnits(data.parsedToc), plan.days).forEach(
+            (k) => excluded.add(k),
+          );
         }
       } catch {
         // 완료 항목 조회가 실패해도 재생성 자체는 계속 진행한다 - 기본값만 못 채울 뿐.
@@ -176,37 +189,37 @@ function AppRoutes() {
 
       setParsedToc(data.parsedToc);
       setInitialExcludedKeys([...excluded]);
-      navigate("/select");
+      navigate('/select');
     } catch {
-      alert("저장된 목차를 찾을 수 없어요. 목차 업로드부터 다시 진행해주세요.");
-      navigate("/upload");
+      alert('저장된 목차를 찾을 수 없어요. 목차 업로드부터 다시 진행해주세요.');
+      navigate('/upload');
     }
   };
 
   const handleUnitsSelected = (excludedKeys) => {
     setFilteredToc(filterParsedToc(parsedToc, excludedKeys));
     setLastExcludedKeys(excludedKeys);
-    navigate("/calendar");
+    navigate('/calendar');
   };
 
   const handleCalendarNext = (info) => {
     setCalendarInfo(info);
-    navigate("/availability");
+    navigate('/availability');
   };
 
   const handleAvailabilityNext = async (availability) => {
-    navigate("/generating");
-    setError("");
+    navigate('/generating');
+    setError('');
     setDone(false);
     const weekdayMinutes = buildWeekdayMinutes(availability);
     // 로그인 붙은 뒤: 이 시점엔 아래 로그인 게이트를 통과한 뒤라 항상 진짜
     // uid가 들어있다("guest"는 로그인 화면 자체를 테스트할 때만 나올 수 있는 값).
-    const userId = localStorage.getItem("userId") || "guest";
+    const userId = localStorage.getItem('userId') || 'guest';
 
     try {
       const res = await fetch(`${API_BASE}/generate-plan`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           parsedToc: filteredToc,
           startDate: calendarInfo.startDate,
@@ -227,8 +240,8 @@ function AppRoutes() {
         navigate(MAIN_PAGE_URL);
       }, 1500);
     } catch (e) {
-      setError(e.message || "플랜 생성 중 오류가 발생했습니다.");
-      navigate("/availability");
+      setError(e.message || '플랜 생성 중 오류가 발생했습니다.');
+      navigate('/availability');
     }
   };
 
@@ -243,9 +256,9 @@ function AppRoutes() {
     setUserId(uid);
     try {
       const res = await fetch(`${API_BASE}/plans/${uid}`);
-      navigate(res.ok ? MAIN_PAGE_URL : "/upload");
+      navigate(res.ok ? MAIN_PAGE_URL : '/upload');
     } catch {
-      navigate("/upload");
+      navigate('/upload');
     }
   };
 
@@ -258,36 +271,47 @@ function AppRoutes() {
 
   // 로그인 안 돼 있으면 어떤 경로로 들어왔든 로그인 화면부터 보여준다
   // (마법사/메인페이지 둘 다 이 아래에서 막힌다).
-if (!userId) {
-  if (location.pathname === "/login") {
-    return <LoginPage onLoggedIn={handleLoggedIn} onGoSignup={() => navigate("/signup")} />;
+  if (!userId) {
+    if (location.pathname === '/login') {
+      return (
+        <LoginPage
+          onLoggedIn={handleLoggedIn}
+          onGoSignup={() => navigate('/signup')}
+        />
+      );
+    }
+    if (location.pathname === '/signup') {
+      return <SignupPage onGoLogin={() => navigate('/login')} />;
+    }
+    return <LandingPage onNavigate={navigate} />;
   }
-  if (location.pathname === "/signup") {
-    return <SignupPage onGoLogin={() => navigate("/login")} />;
-  }
-  return <LandingPage onNavigate={navigate} />;
-}
 
   // 이미 로그인된 채로(브라우저에 userId가 남아있는 채로) 사이트 루트("/")로
   // 들어온 경우 — 예: 주소창에 직접 쳐서 들어오거나 새로고침. 아래 STEP_ROUTES/
   // Routes 어디에도 "/"가 없어서 그냥 두면 "*"에 걸려 무조건 /upload로
   // 보내버린다(로그인 직후 판단 로직을 안 거침). handleLoggedIn과 똑같은 기준
   // (기존 플랜 있으면 메인, 없으면 마법사)으로 여기서도 판단해준다.
-  if (location.pathname === "/") {
+  if (location.pathname === '/') {
     return <RootRedirect userId={userId} />;
   }
 
   // "/main"은 팀 전체 메인페이지 — 마법사 껍데기(스텝바/카드) 없이 MainScreen이
   // 자기 레이아웃을 통째로 그린다. 그 외 경로는 좁은 마법사 카드 안에서 보여준다.
-  if (location.pathname === "/main") {
+  if (location.pathname === '/main') {
     return <MainScreen onStartReplan={handleStartReplan} />;
   }
 
-if (location.pathname === "/mypage") {
-  return <MyPageScreen />;
-}
+  if (location.pathname === '/mypage') {
+    return <MyPageScreen />;
+  }
 
-  const currentStepIndex = STEP_ROUTES.findIndex((r) => r.path === location.pathname);
+  if (location.pathname === '/study-stats') {
+    return <StudyStatsScreen />;
+  }
+
+  const currentStepIndex = STEP_ROUTES.findIndex(
+    (r) => r.path === location.pathname,
+  );
 
   return (
     <div style={s.page}>
@@ -307,7 +331,10 @@ if (location.pathname === "/mypage") {
 
       <div style={s.card}>
         <Routes>
-          <Route path="/upload" element={<UploadScreen onParsed={handleParsed} />} />
+          <Route
+            path="/upload"
+            element={<UploadScreen onParsed={handleParsed} />}
+          />
           <Route
             path="/select"
             element={
@@ -315,19 +342,32 @@ if (location.pathname === "/mypage") {
                 parsedToc={parsedToc}
                 initialExcludedKeys={initialExcludedKeys}
                 onNext={handleUnitsSelected}
-                onBack={() => navigate("/upload")}
+                onBack={() => navigate('/upload')}
               />
             }
           />
           <Route
             path="/calendar"
-            element={<CalendarScreen onNext={handleCalendarNext} onBack={() => navigate("/select")} />}
+            element={
+              <CalendarScreen
+                onNext={handleCalendarNext}
+                onBack={() => navigate('/select')}
+              />
+            }
           />
           <Route
             path="/availability"
-            element={<AvailabilityScreen onNext={handleAvailabilityNext} onBack={() => navigate("/calendar")} />}
+            element={
+              <AvailabilityScreen
+                onNext={handleAvailabilityNext}
+                onBack={() => navigate('/calendar')}
+              />
+            }
           />
-          <Route path="/generating" element={<GeneratingScreen done={done} />} />
+          <Route
+            path="/generating"
+            element={<GeneratingScreen done={done} />}
+          />
           <Route path="*" element={<Navigate to="/upload" replace />} />
         </Routes>
       </div>

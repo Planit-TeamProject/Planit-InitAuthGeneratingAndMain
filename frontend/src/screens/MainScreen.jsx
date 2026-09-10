@@ -292,39 +292,67 @@ export default function MainScreen({ onStartReplan }) {
   };
 
   if (error || !plan) {
-  return (
-    <div style={page}>
-      <div style={topbar}>
-        <strong>Planit</strong>
+    return (
+      <div style={page}>
+        <div style={topbar}>
+          <strong>Planit</strong>
+        </div>
+        <button
+          style={hamburgerBtn}
+          title="메뉴"
+          onClick={() => setSidebarOpen(true)}
+        >
+          ☰
+        </button>
+        {sidebarOpen && (
+          <>
+            <div style={sidebarOverlay} onClick={() => setSidebarOpen(false)} />
+            <div style={sidebarPanel}>
+              <strong style={{ fontSize: 16, marginBottom: 12 }}>Planit</strong>
+              <span
+                style={sidebarItem}
+                onClick={() => {
+                  setSidebarOpen(false);
+                  navigate('/mypage');
+                }}
+              >
+                마이페이지
+              </span>
+              <span
+                style={sidebarItem}
+                onClick={() => {
+                  setSidebarOpen(false);
+                  navigate('/study-stats');
+                }}
+              >
+                학습 통계
+              </span>
+              <span style={sidebarItemDisabled} title="준비중">
+                챗봇 (준비중)
+              </span>
+              <div style={sidebarDivider} />
+              <span
+                style={sidebarItem}
+                onClick={() => {
+                  setSidebarOpen(false);
+                  handleLogout();
+                }}
+              >
+                로그아웃
+              </span>
+            </div>
+          </>
+        )}
+        {error ? (
+          <p style={{ padding: 28, color: theme.colors.danger }}>{error}</p>
+        ) : (
+          <p style={{ padding: 28, color: theme.colors.textSoft }}>
+            학습 플랜을 불러오는 중...
+          </p>
+        )}
       </div>
-      <button style={hamburgerBtn} title="메뉴" onClick={() => setSidebarOpen(true)}>☰</button>
-      {sidebarOpen && (
-        <>
-          <div style={sidebarOverlay} onClick={() => setSidebarOpen(false)} />
-          <div style={sidebarPanel}>
-            <strong style={{ fontSize: 16, marginBottom: 12 }}>Planit</strong>
-            <span style={sidebarItem} onClick={() => { setSidebarOpen(false); navigate("/mypage"); }}>
-              마이페이지
-            </span>
-            <span style={sidebarItem} onClick={() => { setSidebarOpen(false); navigate("/study-stats"); }}>
-              학습 통계
-            </span>
-            <span style={sidebarItemDisabled} title="준비중">챗봇 (준비중)</span>
-            <div style={sidebarDivider} />
-            <span style={sidebarItem} onClick={() => { setSidebarOpen(false); handleLogout(); }}>
-              로그아웃
-            </span>
-          </div>
-        </>
-      )}
-      {error ? (
-        <p style={{ padding: 28, color: theme.colors.danger }}>{error}</p>
-      ) : (
-        <p style={{ padding: 28, color: theme.colors.textSoft }}>학습 플랜을 불러오는 중...</p>
-      )}
-    </div>
-  );
-}
+    );
+  }
 
   const firstOfMonth = new Date(viewYear, viewMonth, 1);
   const startWeekday = firstOfMonth.getDay();
@@ -392,8 +420,16 @@ export default function MainScreen({ onStartReplan }) {
             >
               마이페이지
             </span>
-            {/* TODO: 대시보드 화면/라우트는 아직 없음 - 팀과 협의 후 연결 */}
-            <span style={sidebarItem}>대시보드</span>
+            <span
+              style={sidebarItem}
+              onClick={() => {
+                setSidebarOpen(false);
+                navigate('/study-stats');
+              }}
+            >
+              학습 통계
+            </span>
+
             {/* TODO: 챗봇 기능 나오면 라우트 연결 */}
             <span style={sidebarItemDisabled} title="준비중">
               챗봇 (준비중)
