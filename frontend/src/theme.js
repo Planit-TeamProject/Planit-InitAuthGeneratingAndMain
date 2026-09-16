@@ -1,20 +1,20 @@
 export const theme = {
   colors: {
-    bg: "#F7F2FA",
-    card: "#FFFFFF",
-    primary: "#7C4DFF",
-    primaryDark: "#5E35D8",
-    primarySoft: "#EFE6FE",
-    text: "#231B2E",
-    textSoft: "#7A7288",
-    border: "#E7E1F2",
-    danger: "#D64545",
-    success: "#3FAE6A",
-    disabled: "#D9CFF3",
+    bg: "#FBEFEF",
+    card: "#FFFBF9",
+    primary: "#A98FC2",
+    primaryDark: "#8F6FA8",
+    primarySoft: "#EFE8F5",
+    text: "#4B3B47",
+    textSoft: "#8B7488",
+    border: "#F7DCE0",
+    danger: "#C0574B",
+    success: "#3C8C55",
+    disabled: "#C2A9B4",
   },
   radius: { sm: 10, md: 16, lg: 22, pill: 999 },
-  shadow: "0 12px 28px -14px rgba(124, 77, 255, 0.35)",
-  font: "'Pretendard', system-ui, -apple-system, 'Segoe UI', Roboto, 'Malgun Gothic', sans-serif",
+  shadow: "0 12px 28px -14px rgba(169, 143, 194, 0.35)",
+  font: "'Noto Sans KR', 'Pretendard', system-ui, -apple-system, 'Segoe UI', Roboto, 'Malgun Gothic', sans-serif",
 };
 
 const base = {

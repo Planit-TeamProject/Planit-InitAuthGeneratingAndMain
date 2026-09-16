@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { addDoc, collection, Timestamp } from 'firebase/firestore';
+import { db } from '../firebase';
 import { theme } from '../theme';
 import logo from '../assets/logo.png';
 
@@ -12,9 +14,9 @@ const API_BASE = 'http://localhost:8000';
 //      건너뛰어 팀원 서버를 브라우저에서 직접 호출한다. 팀원 쪽에 이미 검증
 //      로직(진행률 허용값, 본인 소유 확인)이 테스트까지 돼 있어서 그대로 쓰는 것.
 const JAVA_API_BASE = 'http://localhost:8080';
-// 로그인 백엔드(Planit-Web-Auth-Plan-Quiz, 8081번 포트). 로그아웃 버튼만
-// 여기서 직접 호출한다 - 세션 쿠키를 지우는 것도 결국 서버가 해야 하는
-// 일이라서(HttpSession.invalidate()), 파이썬을 거칠 이유가 없다.
+// 로그인 백엔드(Planit-Web-Auth-Plan-Quiz). 로그아웃 버튼만 여기서 직접
+// 호출한다 - 세션 쿠키를 지우는 것도 결국 서버가 해야 하는 일이라서
+// (HttpSession.invalidate()), 파이썬을 거칠 이유가 없다.
 const AUTH_API_BASE = 'http://localhost:8081';
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 const PROGRESS_STEPS = [25, 50, 75, 100];
@@ -32,6 +34,13 @@ function formatStopwatch(totalSeconds) {
   const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
   const s = String(totalSeconds % 60).padStart(2, '0');
   return `${h}:${m}:${s}`;
+}
+function formatMinutesToHM(totalMinutes) {
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h === 0) return `${m}분`;
+  if (m === 0) return `${h}시간`;
+  return `${h}시간 ${m}분`;
 }
 
 function downloadJson(plan) {
@@ -117,7 +126,6 @@ const sidebarDivider = {
   margin: '8px 0',
 };
 const layoutScroll = {
-  // layout이 화면보다 넓을 때 이 안에서만 가로 스크롤되게 하고, 상단바는 그대로 고정해둔다
   width: '100%',
   overflowX: 'auto',
 };
@@ -157,6 +165,60 @@ function s_btnPrimary(disabled) {
   };
 }
 
+// 사이드바(마이페이지/학습통계/챗봇/로그아웃) - 에러/로딩/정상 화면 3곳에서
+// 전부 똑같이 써서, 계획 유무와 상관없이 항상 메뉴를 쓸 수 있게 한다.
+function Sidebar({ open, onClose, navigate, handleLogout }) {
+  if (!open) return null;
+  return (
+    <>
+      <div style={sidebarOverlay} onClick={onClose} />
+      <div style={sidebarPanel}>
+        <img
+          src={logo}
+          alt="Planit"
+          style={{
+            height: 24,
+            width: 'auto',
+            alignSelf: 'flex-start',
+            marginBottom: 12,
+          }}
+        />
+        <span
+          style={sidebarItem}
+          onClick={() => {
+            onClose();
+            navigate('/mypage');
+          }}
+        >
+          마이페이지
+        </span>
+        <span
+          style={sidebarItem}
+          onClick={() => {
+            onClose();
+            navigate('/study-stats');
+          }}
+        >
+          학습 통계
+        </span>
+        <span style={sidebarItemDisabled} title="준비중">
+          챗봇 (준비중)
+        </span>
+        <div style={sidebarDivider} />
+        <span
+          style={sidebarItem}
+          onClick={() => {
+            onClose();
+            handleLogout();
+          }}
+        >
+          로그아웃
+        </span>
+      </div>
+    </>
+  );
+}
+
 export default function MainScreen({ onStartReplan }) {
   const navigate = useNavigate();
   const [plan, setPlan] = useState(null);
@@ -167,8 +229,39 @@ export default function MainScreen({ onStartReplan }) {
   const [actionMsg, setActionMsg] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const [stopwatchSeconds, setStopwatchSeconds] = useState(0);
-  const [stopwatchRunning, setStopwatchRunning] = useState(false);
+  const userId = localStorage.getItem('userId') || 'guest'; // TODO: 로그인 붙으면 이 fallback 제거
+  const stopwatchStorageKey = `planit_stopwatch_${userId}`;
+
+  // 새로고침/탭 재로드/컴퓨터 절전 이후에도 진행 중이던 스톱워치가 이어지도록,
+  // localStorage에 저장해둔 값으로 초기 state를 복원한다. 실행 중이었다면
+  // 저장 시점(savedAt)부터 지금까지 흐른 실제 시간만큼 더해준다.
+  const loadStopwatch = () => {
+    try {
+      const raw = localStorage.getItem(stopwatchStorageKey);
+      if (!raw) return { seconds: 0, running: false, startedAt: null };
+      const saved = JSON.parse(raw);
+      const elapsedSincePageClosed = saved.running
+        ? Math.max(0, Math.floor((Date.now() - saved.savedAt) / 1000))
+        : 0;
+      return {
+        seconds: (saved.seconds || 0) + elapsedSincePageClosed,
+        running: !!saved.running,
+        startedAt: saved.startedAt ? new Date(saved.startedAt) : null,
+      };
+    } catch {
+      return { seconds: 0, running: false, startedAt: null };
+    }
+  };
+
+  const [stopwatchSeconds, setStopwatchSeconds] = useState(
+    () => loadStopwatch().seconds,
+  );
+  const [stopwatchRunning, setStopwatchRunning] = useState(
+    () => loadStopwatch().running,
+  );
+  const [stopwatchStartedAt, setStopwatchStartedAt] = useState(
+    () => loadStopwatch().startedAt,
+  );
 
   useEffect(() => {
     if (!stopwatchRunning) return;
@@ -176,7 +269,48 @@ export default function MainScreen({ onStartReplan }) {
     return () => clearInterval(id);
   }, [stopwatchRunning]);
 
-  const userId = localStorage.getItem('userId') || 'guest'; // TODO: 로그인 붙으면 이 fallback 제거
+  // 값이 바뀔 때마다 바로 localStorage에 백업 - 여기 있는 값이 실제 진행 상태의
+  // 유일한 저장소라서(서버에는 완료 시점에만 전송), 그 전에 새로고침/탭 재로드가
+  // 일어나도 이 백업으로 이어서 복원한다.
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        stopwatchStorageKey,
+        JSON.stringify({
+          seconds: stopwatchSeconds,
+          running: stopwatchRunning,
+          startedAt: stopwatchStartedAt
+            ? stopwatchStartedAt.toISOString()
+            : null,
+          savedAt: Date.now(),
+        }),
+      );
+    } catch {
+      // localStorage를 못 쓰는 환경이면 그냥 이번 세션 동안만 메모리로 유지한다.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stopwatchSeconds, stopwatchRunning, stopwatchStartedAt]);
+
+  const handleStopwatchToggle = () => {
+    setStopwatchRunning((r) => {
+      const next = !r;
+      if (next && stopwatchStartedAt == null) {
+        setStopwatchStartedAt(new Date());
+      }
+      return next;
+    });
+  };
+
+  const handleStopwatchReset = () => {
+    setStopwatchRunning(false);
+    setStopwatchSeconds(0);
+    setStopwatchStartedAt(null);
+    try {
+      localStorage.removeItem(stopwatchStorageKey);
+    } catch {
+      // 무시 - 다음 렌더에서 0으로 다시 저장됨
+    }
+  };
 
   const reloadPlan = () =>
     fetch(`${API_BASE}/plans/${userId}`)
@@ -212,12 +346,8 @@ export default function MainScreen({ onStartReplan }) {
   const [selectedDate, setSelectedDate] = useState(todayKey());
 
   const todayItems = planByDate[todayKey()]?.items || [];
-  // memberId는 파이썬 서버(GET /plans/{userId})가 응답에 같이 실어준 값이다
-  // (server.py 참고) - 팀원 API를 부를 때 "이게 누구 항목인지" 알려주는 용도.
-  // itemId는 Firestore 문서 id 그 자체라서, 팀원 API가 그 id로 문서를 바로 찾는다.
   const memberId = plan?.memberId;
 
-  // (C) 진도율 버튼을 누르면 파이썬을 거치지 않고 팀원의 체크리스트 API로 바로 반영한다.
   const handleSetProgress = async (itemId, progressRate) => {
     if (memberId == null) return;
     setActionMsg('');
@@ -233,28 +363,57 @@ export default function MainScreen({ onStartReplan }) {
     }
   };
 
-  // (C) "오늘 학습 마무리하기": 다 못 채웠어도 팀원 API로 하루 완료 기록을 남긴다.
+  // 스톱워치로 잰 경과 시간을 study_sessions에 기록한다 - 통계/뱃지/레이더차트
+  // (study-stats-data.js, radar-metrics.js, badgeChecker.js)가 전부 이 컬렉션을
+  // memberId(=localStorage의 userId)로 조회하므로, 여기서도 반드시 그 userId를
+  // 써야 한다 (Java 체크리스트 API용 memberId와는 다른 값).
+  const recordStudySession = async () => {
+    if (stopwatchSeconds <= 0) return;
+    const startedAt =
+      stopwatchStartedAt ?? new Date(Date.now() - stopwatchSeconds * 1000);
+    await addDoc(collection(db, 'study_sessions'), {
+      memberId: userId,
+      startedAt: Timestamp.fromDate(startedAt),
+      durationSeconds: stopwatchSeconds,
+    });
+    setStopwatchRunning(false);
+    setStopwatchSeconds(0);
+    setStopwatchStartedAt(null);
+    try {
+      localStorage.removeItem(stopwatchStorageKey);
+    } catch {
+      // 지우기 실패해도 다음 렌더에서 0으로 다시 저장되므로 무시한다.
+    }
+  };
+
   const handleCompleteDay = async () => {
     if (memberId == null) return;
     setSaving(true);
     setSaveMsg('');
+    const errors = [];
+
     try {
       const res = await fetch(
         `${JAVA_API_BASE}/api/study-plan-items/complete-day?memberId=${memberId}&date=${todayKey()}`,
         { method: 'POST' },
       );
       if (!res.ok) throw new Error('오늘 학습 마무리에 실패했습니다.');
-      setSaveMsg('오늘 학습을 마무리했어요!');
     } catch (e) {
-      setSaveMsg(e.message);
-    } finally {
-      setSaving(false);
+      errors.push(e.message);
     }
+
+    try {
+      await recordStudySession();
+    } catch (e) {
+      errors.push('학습 시간 저장 실패: ' + e.message);
+    }
+
+    setSaveMsg(
+      errors.length ? errors.join(' / ') : '오늘 학습을 마무리했어요!',
+    );
+    setSaving(false);
   };
 
-  // 로그인 백엔드의 세션 쿠키를 지워달라고 요청한 뒤, 로컬에 저장해둔 uid도
-  // 지우고 새로고침한다. 새로고침되면 App.jsx의 로그인 게이트가 다시 동작해서
-  // (localStorage에 "userId"가 없으니) 로그인 화면으로 자연스럽게 돌아간다.
   const handleLogout = async () => {
     try {
       await fetch(`${AUTH_API_BASE}/api/auth/logout`, {
@@ -295,7 +454,7 @@ export default function MainScreen({ onStartReplan }) {
     return (
       <div style={page}>
         <div style={topbar}>
-          <strong>Planit</strong>
+          <img src={logo} alt="Planit" style={{ height: 28 }} />
         </div>
         <button
           style={hamburgerBtn}
@@ -304,51 +463,14 @@ export default function MainScreen({ onStartReplan }) {
         >
           ☰
         </button>
-        {sidebarOpen && (
-          <>
-            <div style={sidebarOverlay} onClick={() => setSidebarOpen(false)} />
-            <div style={sidebarPanel}>
-              <strong style={{ fontSize: 16, marginBottom: 12 }}>Planit</strong>
-              <span
-                style={sidebarItem}
-                onClick={() => {
-                  setSidebarOpen(false);
-                  navigate('/mypage');
-                }}
-              >
-                마이페이지
-              </span>
-              <span
-                style={sidebarItem}
-                onClick={() => {
-                  setSidebarOpen(false);
-                  navigate('/study-stats');
-                }}
-              >
-                학습 통계
-              </span>
-              <span style={sidebarItemDisabled} title="준비중">
-                챗봇 (준비중)
-              </span>
-              <div style={sidebarDivider} />
-              <span
-                style={sidebarItem}
-                onClick={() => {
-                  setSidebarOpen(false);
-                  handleLogout();
-                }}
-              >
-                로그아웃
-              </span>
-            </div>
-          </>
-        )}
-        {error ? (
+        <Sidebar
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          navigate={navigate}
+          handleLogout={handleLogout}
+        />
+        {error && (
           <p style={{ padding: 28, color: theme.colors.danger }}>{error}</p>
-        ) : (
-          <p style={{ padding: 28, color: theme.colors.textSoft }}>
-            학습 플랜을 불러오는 중...
-          </p>
         )}
       </div>
     );
@@ -382,6 +504,9 @@ export default function MainScreen({ onStartReplan }) {
     0,
   );
   const totalMinutes = (plan.days || []).reduce((sum, d) => sum + d.minutes, 0);
+  const totalDays = (plan.days || []).length;
+  const avgMinutesPerDay =
+    totalDays > 0 ? Math.round(totalMinutes / totalDays) : 0;
 
   return (
     <div style={page}>
@@ -397,56 +522,12 @@ export default function MainScreen({ onStartReplan }) {
       >
         ☰
       </button>
-      {sidebarOpen && (
-        <>
-          <div style={sidebarOverlay} onClick={() => setSidebarOpen(false)} />
-          <div style={sidebarPanel}>
-            <img
-              src={logo}
-              alt="Planit"
-              style={{
-                height: 24,
-                width: 'auto',
-                alignSelf: 'flex-start',
-                marginBottom: 12,
-              }}
-            />
-            <span
-              style={sidebarItem}
-              onClick={() => {
-                setSidebarOpen(false);
-                navigate('/mypage');
-              }}
-            >
-              마이페이지
-            </span>
-            <span
-              style={sidebarItem}
-              onClick={() => {
-                setSidebarOpen(false);
-                navigate('/study-stats');
-              }}
-            >
-              학습 통계
-            </span>
-
-            {/* TODO: 챗봇 기능 나오면 라우트 연결 */}
-            <span style={sidebarItemDisabled} title="준비중">
-              챗봇 (준비중)
-            </span>
-            <div style={sidebarDivider} />
-            <span
-              style={sidebarItem}
-              onClick={() => {
-                setSidebarOpen(false);
-                handleLogout();
-              }}
-            >
-              로그아웃
-            </span>
-          </div>
-        </>
-      )}
+      <Sidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        navigate={navigate}
+        handleLogout={handleLogout}
+      />
 
       <div style={layoutScroll}>
         <div style={layout}>
@@ -466,8 +547,9 @@ export default function MainScreen({ onStartReplan }) {
                 fontSize: 14,
               }}
             >
-              총 {totalItems}개 항목 · 총 {totalMinutes}분 배정 · 항목을 다른
-              날짜로 드래그해서 옮길 수 있어요
+              총 {totalItems}개 항목 · 하루 평균{' '}
+              {formatMinutesToHM(avgMinutesPerDay)} 배정 · 항목을 다른 날짜로
+              드래그해서 옮길 수 있어요
             </p>
             {actionMsg && (
               <p
@@ -540,9 +622,6 @@ export default function MainScreen({ onStartReplan }) {
                             />
                           );
                         const key = toKey(viewYear, viewMonth, d);
-                        // 플랜에 항목이 하나도 없는 날짜는 응답에서 아예 빠지므로(팀원 API 특성),
-                        // 여기서 빈 날짜로 채워서 항상 선택/드롭 가능하게 한다 - 그래야 마지막
-                        // 항목까지 다른 날로 옮긴 뒤에도 그 날짜가 "비활성화"되지 않는다.
                         const day = planByDate[key] || {
                           date: key,
                           minutes: 0,
@@ -732,7 +811,6 @@ export default function MainScreen({ onStartReplan }) {
                 paddingBottom: 16,
               }}
             >
-              {/* TODO: 완료 처리할 때 이 경과 시간(stopwatchSeconds)도 같이 서버로 전송 */}
               <div
                 style={{
                   fontSize: 32,
@@ -747,25 +825,15 @@ export default function MainScreen({ onStartReplan }) {
               <div
                 style={{ display: 'flex', gap: 8, justifyContent: 'center' }}
               >
-                <button
-                  onClick={() => setStopwatchRunning((r) => !r)}
-                  style={s_btnSecondary}
-                >
+                <button onClick={handleStopwatchToggle} style={s_btnSecondary}>
                   {stopwatchRunning ? '중단' : '시작'}
                 </button>
-                <button
-                  onClick={() => {
-                    setStopwatchRunning(false);
-                    setStopwatchSeconds(0);
-                  }}
-                  style={s_btnSecondary}
-                >
+                <button onClick={handleStopwatchReset} style={s_btnSecondary}>
                   초기화
                 </button>
               </div>
             </div>
 
-            {/* 오늘 할 일: 팀원의 체크리스트 API(진도율 PATCH)를 항목 클릭 즉시 직접 호출한다 */}
             <div style={{ padding: 20, flex: 1 }}>
               <h3 style={{ margin: '0 0 12px', fontSize: 16 }}>오늘 할 일</h3>
               {todayItems.length === 0 ? (

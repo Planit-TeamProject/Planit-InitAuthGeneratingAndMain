@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './MyPageScreen.css';
 import { auth } from '../firebase';
 import { db } from '../firebase';
@@ -13,6 +14,76 @@ import { updateProfile, sendPasswordResetEmail } from 'firebase/auth';
 // AUTH_API_BASE: 로그인 백엔드(김동호) 포트. 8080.
 // =========================================================================
 const AUTH_API_BASE = 'http://localhost:8080';
+// 로그아웃은 다른 화면(MainScreen.jsx, StudyStatsScreen.jsx)과 동일하게
+// 8081번 포트를 쓴다 - 탈퇴(AUTH_API_BASE)와 실제로 다른 값이라 따로 뒀다.
+const LOGOUT_API_BASE = 'http://localhost:8081';
+
+// MainScreen.jsx/StudyStatsScreen.jsx와 동일한 상단바 + 햄버거 메뉴
+// (fallback 색상은 StudyStatsScreen.css :root 값과 동일 - 이 화면 CSS엔
+//  그 변수가 정의돼 있지 않아서, 다른 화면을 안 거치고 바로 /mypage로
+//  들어와도 깨지지 않게 기본값을 같이 적어둔다.)
+const topbar = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '16px 28px',
+  background: '#fff',
+  borderBottom: '1px solid var(--line, #F7DCE0)',
+  position: 'sticky',
+  top: 0,
+  zIndex: 10,
+};
+const hamburgerBtn = {
+  position: 'fixed',
+  top: 64,
+  left: 28,
+  zIndex: 9,
+  border: 'none',
+  background: 'transparent',
+  fontSize: 20,
+  cursor: 'pointer',
+  color: 'var(--ink, #4B3B47)',
+  padding: 4,
+};
+const sidebarOverlay = {
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(0,0,0,0.25)',
+  zIndex: 19,
+};
+const sidebarPanel = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  bottom: 0,
+  width: 240,
+  background: '#fff',
+  borderRight: '1px solid var(--line, #F7DCE0)',
+  boxShadow: '0 12px 28px -14px rgba(169,143,194,0.35)',
+  zIndex: 20,
+  padding: '20px 16px',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+};
+const sidebarItem = {
+  padding: '10px 12px',
+  borderRadius: 10,
+  fontSize: 14,
+  fontWeight: 600,
+  color: 'var(--ink, #4B3B47)',
+  cursor: 'pointer',
+};
+const sidebarItemDisabled = {
+  ...sidebarItem,
+  color: 'var(--ink-soft, #8B7488)',
+  cursor: 'not-allowed',
+};
+const sidebarDivider = {
+  height: 1,
+  background: 'var(--line, #F7DCE0)',
+  margin: '8px 0',
+};
 
 const Icon = {
   user: (
@@ -87,11 +158,13 @@ const Icon = {
 };
 
 export default function MyPageScreen() {
+  const navigate = useNavigate();
   const [memberId] = useState(() => localStorage.getItem('userId'));
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (!memberId) return;
@@ -159,6 +232,20 @@ export default function MyPageScreen() {
     }
   };
 
+  // MainScreen.jsx/StudyStatsScreen.jsx의 로그아웃과 동일한 로직
+  const handleLogout = async () => {
+    try {
+      await fetch(`${LOGOUT_API_BASE}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      // 로그아웃 요청이 실패해도 로컬 로그인 상태는 지워서 화면은 로그인 화면으로 보낸다.
+    }
+    localStorage.removeItem('userId');
+    window.location.href = '/upload';
+  };
+
   if (!memberId) {
     return (
       <div className="mypage-root">
@@ -167,20 +254,76 @@ export default function MyPageScreen() {
     );
   }
   if (loading) {
-    return (
-      <div className="mypage-root">
-        <p>불러오는 중...</p>
-      </div>
-    );
+    return <div className="mypage-root"></div>;
   }
 
   return (
     <div className="mypage-root">
-      <div className="mypage-page">
-        <div className="mypage-topbar">
-          <img className="mypage-logo" src="/wordmark.png" alt="Planit" />
-        </div>
+      <div style={topbar}>
+        <img
+          src="/wordmark.png"
+          alt="Planit"
+          style={{ height: 28, cursor: 'pointer' }}
+          onClick={() => navigate('/main')}
+        />
+      </div>
+      <button
+        style={hamburgerBtn}
+        title="메뉴"
+        onClick={() => setSidebarOpen(true)}
+      >
+        ☰
+      </button>
+      {sidebarOpen && (
+        <>
+          <div style={sidebarOverlay} onClick={() => setSidebarOpen(false)} />
+          <div style={sidebarPanel}>
+            <img
+              src="/wordmark.png"
+              alt="Planit"
+              style={{
+                height: 24,
+                width: 'auto',
+                alignSelf: 'flex-start',
+                marginBottom: 12,
+              }}
+            />
+            <span
+              style={sidebarItem}
+              onClick={() => {
+                setSidebarOpen(false);
+                navigate('/mypage');
+              }}
+            >
+              마이페이지
+            </span>
+            <span
+              style={sidebarItem}
+              onClick={() => {
+                setSidebarOpen(false);
+                navigate('/study-stats');
+              }}
+            >
+              학습 통계
+            </span>
+            <span style={sidebarItemDisabled} title="준비중">
+              챗봇 (준비중)
+            </span>
+            <div style={sidebarDivider} />
+            <span
+              style={sidebarItem}
+              onClick={() => {
+                setSidebarOpen(false);
+                handleLogout();
+              }}
+            >
+              로그아웃
+            </span>
+          </div>
+        </>
+      )}
 
+      <div className="mypage-page">
         <div className="mypage-layout">
           <aside className="mypage-sidebar">
             <div className="mypage-avatar">{name ? name.slice(0, 1) : 'P'}</div>
